@@ -13,6 +13,7 @@ import SocketHandler from './socket/socket';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
+import cursoRoutes from './routes/curso.routes';
 
 export default class Server {
     public app: express.Express;
@@ -86,6 +87,7 @@ export default class Server {
 
         // API Routes
         this.app.use('/api/auth', authRoutes);
+        this.app.use('/api/curso', cursoRoutes);
     }
 
     private errorHandling(): void {

@@ -30,8 +30,6 @@ export const loginOutlook = async (req: Request, res: Response) => {
 
         const { email } = outlookResult.user;
 
-        console.log(email);
-
         // Buscar: reportar usuario o reportar que usuario no está autorizado
         const usuario = await Usuario.findOne({ email });
 
