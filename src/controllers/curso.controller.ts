@@ -32,10 +32,20 @@ interface CursoQuery {
 
 export const obtenerCursos = async (req: AuthenticatedRequest, res: Response) => {
 
-    console.log('first')
-
+console.log('HOLA')
     try {
-        const usuario = req.usuario;
+
+        
+
+        const total = await Curso.countDocuments()
+
+       const pageNum = 1
+       const limitNum = 10
+       // const { page = '1', limit = '10' } = req.query as { page?: string; limit?: string };
+
+
+
+        // // const usuario = req.usuario;
         const {
             categoria,
             activo,
@@ -47,61 +57,67 @@ export const obtenerCursos = async (req: AuthenticatedRequest, res: Response) =>
             limit = '10'  
         } = req.query as CursoQuery & { page?: string; limit?: string };
 
-        // Validar autenticación
-        if (!usuario) {
-            return res.status(401).json({
-                ok: false,
-                message: 'Token requerido'
-            });
-        }
 
-        // Construir filtro base según rol
-        let filtroBase: any = {};
+        console.log(categoria, activo, publico, semestre, search, page, limit, año)
 
-        // 🎯 CONTROL DE ACCESO POR ROL
-        if (usuario.admin) {
-            // ADMINISTRADOR: Ve todos los cursos
-            filtroBase = {};
-        } else {
-            // TODOS LOS DEMÁS: Solo cursos públicos y activos por defecto
-            // TODO: Implementar lógica para profesores (ve sus cursos) y estudiantes (ve cursos matriculados)
-            filtroBase = {
-                publico: true,
-                activo: true
-            };
-        }
+        const cursos = await Curso.find()
+        // .skip((pageNum - 1) * limitNum).limit(limitNum)
 
-        // Agregar filtros adicionales
-        if (categoria) filtroBase.categoria = categoria;
-        if (activo !== undefined) filtroBase.activo = activo === true;
-        if (publico !== undefined) filtroBase.publico = publico === true;
-        if (semestre) filtroBase.semestre = semestre;
-        if (año) filtroBase.año = parseInt(año.toString());
+        // // Validar autenticación
+        // // if (!usuario) {
+        // //     return res.status(401).json({
+        // //         ok: false,
+        // //         message: 'Token requerido'
+        // //     });
+        // // }
 
-        // Filtro de búsqueda por texto
-        if (search) {
-            filtroBase.$or = [
-                { sigla: { $regex: search, $options: 'i' } },
-                { nombre: { $regex: search, $options: 'i' } },
-                { descripcion: { $regex: search, $options: 'i' } }
-            ];
-        }
+        // // Construir filtro base según rol
+        // let filtroBase: any = {};
 
-        // Paginación
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const skip = (pageNum - 1) * limitNum;
+        // // 🎯 CONTROL DE ACCESO POR ROL
+        // // if (usuario.admin) {
+        // //     // ADMINISTRADOR: Ve todos los cursos
+        // //     filtroBase = {};
+        // // } else {
+        // //     // TODOS LOS DEMÁS: Solo cursos públicos y activos por defecto
+        // //     // TODO: Implementar lógica para profesores (ve sus cursos) y estudiantes (ve cursos matriculados)
+        // //     filtroBase = {
+        // //         publico: true,
+        // //         activo: true
+        // //     };
+        // // }
 
-        // Ejecutar consulta
-        const [cursos, total] = await Promise.all([
-            Curso.find(filtroBase)
-                .select('sigla nombre descripcion categoria creditos activo publico estadisticas.totalEstudiantes fechaModificacion')
-                .sort({ fechaModificacion: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .lean(),
-            Curso.countDocuments(filtroBase)
-        ]);
+        // // Agregar filtros adicionales
+        // if (categoria) filtroBase.categoria = categoria;
+        // if (activo !== undefined) filtroBase.activo = activo === true;
+        // if (publico !== undefined) filtroBase.publico = publico === true;
+        // if (semestre) filtroBase.semestre = semestre;
+        // if (año) filtroBase.año = parseInt(año.toString());
+
+        // // Filtro de búsqueda por texto
+        // if (search) {
+        //     filtroBase.$or = [
+        //         { sigla: { $regex: search, $options: 'i' } },
+        //         { nombre: { $regex: search, $options: 'i' } },
+        //         { descripcion: { $regex: search, $options: 'i' } }
+        //     ];
+        // }
+
+        // // Paginación
+        // const pageNum = parseInt(page);
+        // const limitNum = parseInt(limit);
+        // const skip = (pageNum - 1) * limitNum;
+
+        // // Ejecutar consulta
+        // const [cursos, total] = await Promise.all([
+        //     Curso.find(filtroBase)
+        //         .select('sigla nombre descripcion categoria creditos activo publico estadisticas.totalEstudiantes fechaModificacion')
+        //         .sort({ fechaModificacion: -1 })
+        //         .skip(skip)
+        //         .limit(limitNum)
+        //         .lean(),
+        //     Curso.countDocuments(filtroBase)
+        // ]);
 
         // Respuesta con paginación
         res.json({
@@ -397,6 +413,8 @@ export const eliminarCurso = async (req: AuthenticatedRequest, res: Response) =>
     try {
         const { id } = req.params;
         const usuario = req.usuario;
+
+        console.log(usuario)
 
         // Validar autenticación y permisos
         if (!usuario || !usuario.admin) {

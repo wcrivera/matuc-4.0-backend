@@ -290,6 +290,7 @@ CursoSchema.statics.buscarPorPeriodo = function (año: number, semestre: string)
         .sort({ sigla: 1 });
 };
 
+
 // ==========================================
 // 📤 EXPORT MODELO
 // ==========================================

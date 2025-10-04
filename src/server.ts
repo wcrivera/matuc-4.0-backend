@@ -123,7 +123,3 @@ export default class Server {
         });
     }
 }
-
-// Initialize server
-const server = new Server();
-server.execute();

@@ -168,7 +168,6 @@ const validarId = [
     check('id')
         .isMongoId()
         .withMessage('ID de curso inválido'),
-
     validarCampos
 ];
 
@@ -220,7 +219,7 @@ router.put('/:id',
 // DELETE /api/curso/658f56b795ce81274b56d3f2
 router.delete('/:id',
     verifyJWT,
-    validarId,
+    // validarId,
     eliminarCurso
 );
 

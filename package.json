@@ -2,12 +2,15 @@
   "name": "matuc-v4-backend",
   "version": "1.0.0",
   "description": "MATUC v4 Backend Server",
-  "main": "dist/server.js",
+  "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
-    "postinstall": "tsc"
+    "dev": "ts-node-dev src/index.ts",
+    "start": "node build/index.js",
+    "postinstall": "tsc",
+    "watch-node": "nodemon build/index.js",
+    "watch-ts": "tsc -w",
+    "deploy": "git add . && git commit -m Heroku && git push heroku main"
   },
   "dependencies": {
     "@types/compression": "^1.8.1",
