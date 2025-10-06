@@ -2,9 +2,9 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { validarCampos } from '../middlewares/validation.middleware';
+import { verifyJWT } from '../middlewares/auth.middleware';
 import {
     loginOutlook,
-    verificarToken,
     renovarToken
 } from '../controllers/auth.controller';
 
@@ -34,7 +34,7 @@ router.post('/outlook',
  * GET /api/auth/me
  * Verificar token actual y obtener datos del usuario
  */
-router.get('/me', verificarToken);
+router.get('/me', verifyJWT);
 
 /**
  * POST /api/auth/refresh

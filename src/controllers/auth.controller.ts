@@ -1,6 +1,6 @@
 // src/controllers/auth.controller.ts
 import { Request, Response } from 'express';
-import { generarJWT, verifyJWT, verifyOutlookToken } from '../helpers/jwt';
+import { generateToken, verifyOutlookToken } from '../middlewares/auth.middleware';
 import Usuario from '../models/Usuario';
 
 /**
@@ -46,7 +46,13 @@ export const loginOutlook = async (req: Request, res: Response) => {
         }
 
         // Generar JWT
-        const jwtToken = await generarJWT(usuario.uid.toString());
+        const jwtToken = await generateToken({
+            uid: usuario.uid.toString(),
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            email: usuario.email,
+            admin: usuario.admin
+        });
 
         res.json({
             ok: true,
@@ -74,63 +80,63 @@ export const loginOutlook = async (req: Request, res: Response) => {
  * Verificar token actual
  * GET /api/auth/me
  */
-export const verificarToken = async (req: Request, res: Response) => {
-    try {
-        const authHeader = req.headers.authorization;
-        const xToken = req.headers['x-token'] as string;
+// export const verificarToken = async (req: Request, res: Response) => {
+//     try {
+//         const authHeader = req.headers.authorization;
+//         const xToken = req.headers['x-token'] as string;
 
-        const token = authHeader?.replace('Bearer ', '') || xToken;
+//         const token = authHeader?.replace('Bearer ', '') || xToken;
 
-        if (!token) {
-            return res.status(401).json({
-                ok: false,
-                message: 'Token no proporcionado'
-            });
-        }
+//         if (!token) {
+//             return res.status(401).json({
+//                 ok: false,
+//                 message: 'Token no proporcionado'
+//             });
+//         }
 
-        const [valid, uid] = verifyJWT(token);
+//         const { valid, uid } = verifyJWT(req, res, Next);
 
-        if (!valid || !uid) {
-            return res.status(401).json({
-                ok: false,
-                message: 'Token inválido'
-            });
-        }
+//         if (!valid || !uid) {
+//             return res.status(401).json({
+//                 ok: false,
+//                 message: 'Token inválido'
+//             });
+//         }
 
-        const usuario = await Usuario.findById(uid);
+//         const usuario = await Usuario.findById(uid);
 
-        if (!usuario || !usuario.activo) {
-            return res.status(404).json({
-                ok: false,
-                message: 'Usuario no encontrado'
-            });
-        }
+//         if (!usuario || !usuario.activo) {
+//             return res.status(404).json({
+//                 ok: false,
+//                 message: 'Usuario no encontrado'
+//             });
+//         }
 
-        // Actualizar última conexión
-        usuario.conectado = true;
-        usuario.ultimaConexion = new Date();
-        await usuario.save();
+//         // Actualizar última conexión
+//         usuario.conectado = true;
+//         usuario.ultimaConexion = new Date();
+//         await usuario.save();
 
-        res.json({
-            ok: true,
-            message: 'Token válido',
-            usuario: {
-                uid: usuario.uid,
-                nombre: usuario.nombre,
-                apellido: usuario.apellido,
-                email: usuario.email,
-                admin: usuario.admin
-            }
-        });
+//         res.json({
+//             ok: true,
+//             message: 'Token válido',
+//             usuario: {
+//                 uid: usuario.uid,
+//                 nombre: usuario.nombre,
+//                 apellido: usuario.apellido,
+//                 email: usuario.email,
+//                 admin: usuario.admin
+//             }
+//         });
 
-    } catch (error) {
-        console.error('❌ Error en verificarToken:', error);
-        res.status(500).json({
-            ok: false,
-            message: 'Error interno del servidor'
-        });
-    }
-};
+//     } catch (error) {
+//         console.error('❌ Error en verificarToken:', error);
+//         res.status(500).json({
+//             ok: false,
+//             message: 'Error interno del servidor'
+//         });
+//     }
+// };
 
 /**
  * Renovar token
@@ -138,18 +144,20 @@ export const verificarToken = async (req: Request, res: Response) => {
  */
 export const renovarToken = async (req: Request, res: Response) => {
     try {
-        const { token } = req.body;
+        // const { token } = req.body;
 
-        if (!token) {
-            return res.status(400).json({
-                ok: false,
-                message: 'Token es requerido'
-            });
-        }
+        // if (!token) {
+        //     return res.status(400).json({
+        //         ok: false,
+        //         message: 'Token es requerido'
+        //     });
+        // }
 
-        const [valid, uid] = verifyJWT(token);
+        // const { valid, uid } = verifyJWT(req, res);
 
-        if (!valid || !uid) {
+        const uid = req.usuario?.uid;
+
+        if (!uid) {
             return res.status(401).json({
                 ok: false,
                 message: 'Token inválido'
@@ -166,7 +174,13 @@ export const renovarToken = async (req: Request, res: Response) => {
         }
 
         // Generar nuevo token
-        const nuevoToken = await generarJWT(usuario.uid.toString());
+        const nuevoToken = await generateToken({
+            uid: usuario.uid.toString(),
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            email: usuario.email,
+            admin: usuario.admin
+        });
 
         // Actualizar conexión
         usuario.ultimaConexion = new Date();

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { check } from 'express-validator';
 import { validarCampos } from '../middlewares/validation.middleware';
-import { verifyJWT } from '../helpers/jwt';
+import { verifyJWT } from '../middlewares/auth.middleware';
 import {
     obtenerCursos,
     obtenerCursoPorId,
@@ -11,6 +11,7 @@ import {
     obtenerEstadisticasCursos,
     seedCursos
 } from '../controllers/curso.controller';
+
 
 // ==========================================
 // 🛤️ ROUTER DE CURSOS

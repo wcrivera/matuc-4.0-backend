@@ -6,17 +6,6 @@ import Curso from '../models/Curso';
 // 🔐 INTERFACES PARA TIPOS DE REQUEST
 // ==========================================
 
-interface AuthenticatedRequest extends Request {
-    usuario?: {
-        uid: string;
-        admin: boolean;
-        rol?: string;
-        email: string;
-        nombre: string;
-        apellido: string;
-    };
-}
-
 interface CursoQuery {
     categoria?: string;
     activo?: boolean;
@@ -30,18 +19,14 @@ interface CursoQuery {
 // 📊 OBTENER CURSOS (CON CONTROL DE ROLES)
 // ==========================================
 
-export const obtenerCursos = async (req: AuthenticatedRequest, res: Response) => {
+export const obtenerCursos = async (req: Request, res: Response) => {
 
-console.log('HOLA')
     try {
-
-        
-
         const total = await Curso.countDocuments()
 
-       const pageNum = 1
-       const limitNum = 10
-       // const { page = '1', limit = '10' } = req.query as { page?: string; limit?: string };
+        const pageNum = 1
+        const limitNum = 10
+        // const { page = '1', limit = '10' } = req.query as { page?: string; limit?: string };
 
 
 
@@ -54,7 +39,7 @@ console.log('HOLA')
             año,
             search,
             page = '1',
-            limit = '10'  
+            limit = '10'
         } = req.query as CursoQuery & { page?: string; limit?: string };
 
 
@@ -145,7 +130,7 @@ console.log('HOLA')
 // 📋 OBTENER CURSO POR ID (CON CONTROL DE ACCESO)
 // ==========================================
 
-export const obtenerCursoPorId = async (req: AuthenticatedRequest, res: Response) => {
+export const obtenerCursoPorId = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const usuario = req.usuario;
@@ -167,9 +152,7 @@ export const obtenerCursoPorId = async (req: AuthenticatedRequest, res: Response
         }
 
         // Buscar curso
-        const curso = await Curso.findById(id)
-            .populate('creadoPor', 'nombre apellido email')
-            .lean();
+        const curso = await Curso.findById(id).lean();
 
         if (!curso) {
             return res.status(404).json({
@@ -182,7 +165,8 @@ export const obtenerCursoPorId = async (req: AuthenticatedRequest, res: Response
         if (!usuario.admin) {
             // Si no es admin, verificar acceso
             if (!curso.publico || !curso.activo) {
-                // TODO: Verificar si es profesor del curso o estudiante matriculado
+                // TODO: Verificar si es profesor/ayudante del curso o estudiante matriculado
+                // Por ahora solo permitimos ver cursos públicos y activos
                 return res.status(403).json({
                     ok: false,
                     message: 'No tiene permisos para ver este curso'
@@ -196,7 +180,7 @@ export const obtenerCursoPorId = async (req: AuthenticatedRequest, res: Response
         });
 
     } catch (error) {
-        console.error('Error al obtener curso:', error);
+        console.error('❌ Error al obtener curso:', error);
         res.status(500).json({
             ok: false,
             message: 'Error interno del servidor',
@@ -206,10 +190,11 @@ export const obtenerCursoPorId = async (req: AuthenticatedRequest, res: Response
 };
 
 // ==========================================
-// ➕ CREAR CURSO (SOLO ADMIN Y PROFESORES)
+// ➕ CREAR CURSO (SOLO ADMINISTRADOR)
 // ==========================================
 
-export const crearCurso = async (req: AuthenticatedRequest, res: Response) => {
+export const crearCurso = async (req: Request, res: Response) => {
+
     try {
         const usuario = req.usuario;
         const { sigla, nombre, descripcion, categoria, creditos, semestre, año, configuracion } = req.body;
@@ -222,8 +207,7 @@ export const crearCurso = async (req: AuthenticatedRequest, res: Response) => {
             });
         }
 
-        // 🎯 CONTROL DE PERMISOS: Solo admin puede crear cursos por ahora
-        // TODO: Permitir a profesores crear cursos
+        // 🎯 CONTROL DE PERMISOS: Solo ADMINISTRADOR puede crear cursos
         if (!usuario.admin) {
             return res.status(403).json({
                 ok: false,
@@ -236,43 +220,40 @@ export const crearCurso = async (req: AuthenticatedRequest, res: Response) => {
             return res.status(400).json({
                 ok: false,
                 message: 'Faltan campos requeridos',
-                camposRequeridos: ['sigla', 'nombre', 'descripcion', 'categoria', 'creditos', 'semestre', 'año']
+                campos: ['sigla', 'nombre', 'descripcion', 'categoria', 'creditos', 'semestre', 'año']
             });
         }
 
-        // Verificar que no exista la sigla
-        const cursoExistente = await Curso.findOne({ sigla: sigla.toUpperCase() });
+        // Verificar que la sigla sea única
+        const siglaUpper = sigla.toUpperCase();
+        const cursoExistente = await Curso.findOne({ sigla: siglaUpper });
+
         if (cursoExistente) {
             return res.status(409).json({
                 ok: false,
-                message: `Ya existe un curso con la sigla ${sigla.toUpperCase()}`
+                message: `Ya existe un curso con la sigla ${siglaUpper}`
             });
         }
 
         // Crear nuevo curso
         const nuevoCurso = new Curso({
-            sigla: sigla.toUpperCase(),
+            sigla: siglaUpper,
             nombre,
             descripcion,
             categoria,
             creditos,
             semestre,
             año,
-            configuracion: {
-                notaAprobacion: configuracion?.notaAprobacion || 4.0,
-                requiereAprobacion: configuracion?.requiereAprobacion || false,
-                limitePlazas: configuracion?.limitePlazas,
-                codigoAcceso: configuracion?.codigoAcceso
+            configuracion: configuracion || {
+                notaAprobacion: 4.0,
+                limitePlazas: 50,
+                requiereAprobacion: false
             },
-            creadoPor: new Types.ObjectId(usuario.uid),
-            activo: false,  // Por defecto inactivo
-            publico: false, // Por defecto privado
-            estadisticas: {
-                totalEstudiantes: 0,
-                totalProfesores: 1, // El creador
-                totalModulos: 0,
-                ultimaActividad: new Date()
-            }
+            activo: true,
+            publico: false,
+            creadoPor: usuario.uid,
+            fechaCreacion: new Date(),
+            fechaModificacion: new Date()
         });
 
         const cursoGuardado = await nuevoCurso.save();
@@ -284,9 +265,8 @@ export const crearCurso = async (req: AuthenticatedRequest, res: Response) => {
         });
 
     } catch (error) {
-        console.error('Error al crear curso:', error);
+        console.error('❌ Error al crear curso:', error);
 
-        // Manejar errores de validación de Mongoose
         if (error instanceof Error && error.name === 'ValidationError') {
             return res.status(400).json({
                 ok: false,
@@ -307,7 +287,7 @@ export const crearCurso = async (req: AuthenticatedRequest, res: Response) => {
 // ✏️ ACTUALIZAR CURSO (ADMIN Y PROFESOR_EDITOR)
 // ==========================================
 
-export const actualizarCurso = async (req: AuthenticatedRequest, res: Response) => {
+export const actualizarCurso = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const usuario = req.usuario;
@@ -339,8 +319,10 @@ export const actualizarCurso = async (req: AuthenticatedRequest, res: Response) 
         }
 
         // 🎯 CONTROL DE PERMISOS
+        // Solo ADMINISTRADOR o PROFESOR_EDITOR pueden editar
         if (!usuario.admin) {
-            // TODO: Verificar si es profesor_editor del curso
+            // TODO: Verificar si es PROFESOR_EDITOR asignado a este curso
+            // Por ahora, solo permitimos admin
             return res.status(403).json({
                 ok: false,
                 message: 'No tiene permisos para editar este curso'
@@ -352,6 +334,9 @@ export const actualizarCurso = async (req: AuthenticatedRequest, res: Response) 
         delete camposActualizar.cid;
         delete camposActualizar.fechaCreacion;
         delete camposActualizar.creadoPor;
+
+        // Actualizar fecha de modificación
+        camposActualizar.fechaModificacion = new Date();
 
         // Verificar sigla única si se está actualizando
         if (camposActualizar.sigla && camposActualizar.sigla !== cursoExistente.sigla) {
@@ -378,7 +363,7 @@ export const actualizarCurso = async (req: AuthenticatedRequest, res: Response) 
                 new: true,
                 runValidators: true
             }
-        ).populate('creadoPor', 'nombre apellido email');
+        );
 
         res.json({
             ok: true,
@@ -387,7 +372,7 @@ export const actualizarCurso = async (req: AuthenticatedRequest, res: Response) 
         });
 
     } catch (error) {
-        console.error('Error al actualizar curso:', error);
+        console.error('❌ Error al actualizar curso:', error);
 
         if (error instanceof Error && error.name === 'ValidationError') {
             return res.status(400).json({
@@ -406,15 +391,13 @@ export const actualizarCurso = async (req: AuthenticatedRequest, res: Response) 
 };
 
 // ==========================================
-// 🗑️ ELIMINAR CURSO (SOLO ADMIN)
+// 🗑️ ELIMINAR CURSO (SOLO ADMINISTRADOR)
 // ==========================================
 
-export const eliminarCurso = async (req: AuthenticatedRequest, res: Response) => {
+export const eliminarCurso = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const usuario = req.usuario;
-
-        console.log(usuario)
 
         // Validar autenticación y permisos
         if (!usuario || !usuario.admin) {
@@ -442,18 +425,21 @@ export const eliminarCurso = async (req: AuthenticatedRequest, res: Response) =>
             });
         }
 
-        // TODO: Eliminar también módulos, ejercicios, matriculas relacionadas
-        // await Modulo.deleteMany({ cid: id });
-        // await Matricula.deleteMany({ cid: id });
+        // TODO: Eliminar también módulos, ejercicios, matrículas relacionadas
+        // await Modulo.deleteMany({ cursoId: id });
+        // await Matricula.deleteMany({ cursoId: id });
 
         res.json({
             ok: true,
             message: 'Curso eliminado exitosamente',
-            curso: cursoEliminado
+            curso: {
+                sigla: cursoEliminado.sigla,
+                nombre: cursoEliminado.nombre
+            }
         });
 
     } catch (error) {
-        console.error('Error al eliminar curso:', error);
+        console.error('❌ Error al eliminar curso:', error);
         res.status(500).json({
             ok: false,
             message: 'Error interno del servidor',
@@ -463,54 +449,35 @@ export const eliminarCurso = async (req: AuthenticatedRequest, res: Response) =>
 };
 
 // ==========================================
-// 📊 OBTENER ESTADÍSTICAS DE CURSOS (ADMIN)
+// 📈 OBTENER ESTADÍSTICAS DE CURSOS (ADMIN)
 // ==========================================
 
-export const obtenerEstadisticasCursos = async (req: AuthenticatedRequest, res: Response) => {
+export const obtenerEstadisticasCursos = async (req: Request, res: Response) => {
     try {
         const usuario = req.usuario;
 
-        // Validar permisos
+        // Solo admin puede ver estadísticas globales
         if (!usuario || !usuario.admin) {
             return res.status(403).json({
                 ok: false,
-                message: 'Solo los administradores pueden ver estadísticas'
+                message: 'Solo los administradores pueden ver estadísticas globales'
             });
         }
 
-        // Obtener estadísticas usando el método estático del modelo
-        const [estadisticasPorCategoria, estadisticasGenerales] = await Promise.all([
+        const [
+            totalCursos,
+            cursosActivos,
+            cursosPublicos,
+            cursosPorCategoria
+        ] = await Promise.all([
+            Curso.countDocuments(),
+            Curso.countDocuments({ activo: true }),
+            Curso.countDocuments({ publico: true }),
             Curso.aggregate([
                 {
                     $group: {
                         _id: '$categoria',
-                        totalCursos: { $sum: 1 },
-                        cursosActivos: {
-                            $sum: { $cond: ['$activo', 1, 0] }
-                        },
-                        cursosPublicos: {
-                            $sum: { $cond: ['$publico', 1, 0] }
-                        },
-                        totalEstudiantes: { $sum: '$estadisticas.totalEstudiantes' },
-                        promedioCreditos: { $avg: '$creditos' }
-                    }
-                },
-                { $sort: { totalCursos: -1 } }
-            ]),
-            Curso.aggregate([
-                {
-                    $group: {
-                        _id: null,
-                        totalCursos: { $sum: 1 },
-                        cursosActivos: {
-                            $sum: { $cond: ['$activo', 1, 0] }
-                        },
-                        cursosPublicos: {
-                            $sum: { $cond: ['$publico', 1, 0] }
-                        },
-                        totalEstudiantes: { $sum: '$estadisticas.totalEstudiantes' },
-                        totalProfesores: { $sum: '$estadisticas.totalProfesores' },
-                        promedioCreditos: { $avg: '$creditos' }
+                        count: { $sum: 1 }
                     }
                 }
             ])
@@ -519,13 +486,17 @@ export const obtenerEstadisticasCursos = async (req: AuthenticatedRequest, res: 
         res.json({
             ok: true,
             estadisticas: {
-                general: estadisticasGenerales[0] || {},
-                porCategoria: estadisticasPorCategoria
+                totalCursos,
+                cursosActivos,
+                cursosPublicos,
+                cursosInactivos: totalCursos - cursosActivos,
+                cursosPrivados: totalCursos - cursosPublicos,
+                porCategoria: cursosPorCategoria
             }
         });
 
     } catch (error) {
-        console.error('Error al obtener estadísticas:', error);
+        console.error('❌ Error al obtener estadísticas:', error);
         res.status(500).json({
             ok: false,
             message: 'Error interno del servidor',
@@ -535,68 +506,79 @@ export const obtenerEstadisticasCursos = async (req: AuthenticatedRequest, res: 
 };
 
 // ==========================================
-// 🌱 SEED DE DATOS (SOLO DESARROLLO)
+// 🌱 SEED DE CURSOS (SOLO ADMIN - DESARROLLO)
 // ==========================================
 
-export const seedCursos = async (req: AuthenticatedRequest, res: Response) => {
+export const seedCursos = async (req: Request, res: Response) => {
     try {
         const usuario = req.usuario;
 
-        // Solo en desarrollo y solo admin
-        if (process.env.NODE_ENV === 'production') {
-            return res.status(403).json({
-                ok: false,
-                message: 'Endpoint no disponible en producción'
-            });
-        }
-
+        // Solo admin puede hacer seed
         if (!usuario || !usuario.admin) {
             return res.status(403).json({
                 ok: false,
-                message: 'Solo administradores pueden ejecutar seed'
+                message: 'Solo los administradores pueden ejecutar seed'
             });
         }
 
-        // Importar datos migrados
-        const cursosData = [
-            // Aquí irían los datos del JSON que convertimos
-            // Por ahora, crear uno de ejemplo
+        // Cursos de ejemplo
+        const cursosEjemplo = [
             {
-                sigla: "MAT9998",
-                nombre: "Curso de Prueba",
-                descripcion: "Curso creado desde el seed para testing",
-                categoria: "Otros",
-                creditos: 3,
-                semestre: "2024-1",
+                sigla: 'MAT1610',
+                nombre: 'Cálculo I',
+                descripcion: 'Introducción al cálculo diferencial e integral de funciones de una variable',
+                categoria: 'Cálculo',
+                creditos: 10,
+                semestre: '2024-1',
                 año: 2024,
-                configuracion: {
-                    notaAprobacion: 4.0,
-                    requiereAprobacion: false
-                },
-                creadoPor: new Types.ObjectId(usuario.uid),
                 activo: true,
                 publico: true,
-                estadisticas: {
-                    totalEstudiantes: 0,
-                    totalProfesores: 1,
-                    totalModulos: 0,
-                    ultimaActividad: new Date()
-                }
+                creadoPor: usuario.uid
+            },
+            {
+                sigla: 'MAT1620',
+                nombre: 'Cálculo II',
+                descripcion: 'Cálculo de funciones de varias variables y ecuaciones diferenciales',
+                categoria: 'Cálculo',
+                creditos: 10,
+                semestre: '2024-1',
+                año: 2024,
+                activo: true,
+                publico: true,
+                creadoPor: usuario.uid
+            },
+            {
+                sigla: 'MAT1203',
+                nombre: 'Álgebra Lineal',
+                descripcion: 'Espacios vectoriales, transformaciones lineales y matrices',
+                categoria: 'Álgebra',
+                creditos: 10,
+                semestre: '2024-1',
+                año: 2024,
+                activo: true,
+                publico: false,
+                creadoPor: usuario.uid
             }
         ];
 
-        // Limpiar e insertar
-        await Curso.deleteMany({});
-        const cursosInsertados = await Curso.insertMany(cursosData);
+        // Insertar solo si no existen
+        const cursosCreados = [];
+        for (const cursoData of cursosEjemplo) {
+            const existe = await Curso.findOne({ sigla: cursoData.sigla });
+            if (!existe) {
+                const curso = await Curso.create(cursoData);
+                cursosCreados.push(curso);
+            }
+        }
 
         res.json({
             ok: true,
-            message: `${cursosInsertados.length} cursos insertados exitosamente`,
-            cursos: cursosInsertados
+            message: `Seed completado. ${cursosCreados.length} cursos creados`,
+            cursosCreados
         });
 
     } catch (error) {
-        console.error('Error en seed:', error);
+        console.error('❌ Error en seed:', error);
         res.status(500).json({
             ok: false,
             message: 'Error interno del servidor',

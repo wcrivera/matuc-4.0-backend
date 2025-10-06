@@ -1,6 +1,6 @@
 // src/socket/socket.ts
 import { Server as WebSocketServer, Socket as SocketIOSocket } from "socket.io";
-import { verifyJWT } from "../helpers/jwt";
+import { verifyJWT, verifyToken } from "../middlewares/auth.middleware";
 
 interface SocketUser {
   uid: string;
@@ -28,14 +28,23 @@ export default class SocketHandler {
       const token = socket.handshake.auth.token || socket.handshake.query["x-token"];
       const matricula = socket.handshake.query["matricula"];
 
+      // if (!token || !matricula) {
+      //   return next(new Error("Token y matrícula requeridos"));
+      // }
+
       if (!token || !matricula) {
-        return next(new Error("Token y matrícula requeridos"));
+        socket.disconnect();
+        return;
       }
 
-      const [valido, uid] = verifyJWT(token.toString());
-      if (!valido) {
-        return next(new Error("Token inválido"));
+      const decoded = verifyToken(token);
+
+      if (!decoded) {
+        socket.disconnect();
+        return;
       }
+
+      const uid = decoded.uid;
 
       try {
         const matriculaData = JSON.parse(matricula.toString());
