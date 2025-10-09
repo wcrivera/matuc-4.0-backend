@@ -2,10 +2,10 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { validarCampos } from '../middlewares/validation.middleware';
-import { verifyJWT } from '../middlewares/auth.middleware';
+import { refreshToken, verifyJWT } from '../middlewares/auth.middleware';
 import {
     loginOutlook,
-    renovarToken
+    renovarToken,
 } from '../controllers/auth.controller';
 
 const router = Router();
@@ -40,13 +40,14 @@ router.get('/me', verifyJWT);
  * POST /api/auth/refresh
  * Renovar token JWT
  */
-router.post('/refresh',
-    [
-        body('token')
-            .notEmpty()
-            .withMessage('Token es requerido'),
-        validarCampos
-    ],
+router.get('/refresh',
+    // [
+    //     body('token')
+    //         .notEmpty()
+    //         .withMessage('Token es requerido'),
+    //     validarCampos
+    // ],
+    verifyJWT,
     renovarToken
 );
 

@@ -155,7 +155,7 @@ export const renovarToken = async (req: Request, res: Response) => {
 
         // const { valid, uid } = verifyJWT(req, res);
 
-        const uid = req.usuario?.uid;
+        const { uid } = req.usuario || {};
 
         if (!uid) {
             return res.status(401).json({

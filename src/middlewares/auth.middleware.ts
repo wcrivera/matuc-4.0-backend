@@ -10,6 +10,15 @@ import { config } from '../config/environment';
 
 const JWT_SECRET = config.JWT_SECRET || 'tu_secret_key_muy_seguro_aqui';
 
+export interface TokenPayload {
+    uid: string;
+    nombre?: string;
+    apellido?: string;
+    email?: string;
+    admin?: boolean;
+    rol?: string;
+}
+
 // ==========================================
 // 🎯 VERIFICAR TOKEN JWT
 // ==========================================
@@ -18,18 +27,26 @@ export const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
     try {
         // Obtener token del header Authorization
         const authHeader = req.headers.authorization;
+        const xToken = req.headers['x-token'] as string;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        const token = authHeader?.replace('Bearer ', '') || xToken;
+
+        if (token == null) {
             return res.status(401).json({
                 ok: false,
                 message: 'No se proporcionó token de autenticación'
             });
         }
 
-        const token = authHeader.substring(7); // Remover "Bearer "
-
         // Verificar y decodificar el token
         const decoded = jwt.verify(token, JWT_SECRET) as any;
+
+        if (!decoded) {
+            return res.status(401).json({
+                ok: false,
+                message: 'Token inválido'
+            });
+        }
 
         // Agregar usuario al request
         req.usuario = {
@@ -38,7 +55,6 @@ export const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
             apellido: decoded.apellido,
             email: decoded.email,
             admin: decoded.admin || false,
-            role: decoded.role || decoded.rol,
             rol: decoded.rol || decoded.role
         };
 
@@ -107,15 +123,7 @@ export const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
 // 🔑 GENERAR TOKEN JWT
 // ==========================================
 
-export interface TokenPayload {
-    uid: string;
-    nombre?: string;
-    apellido?: string;
-    email?: string;
-    admin?: boolean;
-    role?: string;
-    rol?: string;
-}
+
 
 export const generateToken = (payload: TokenPayload, expiresIn: string | number = '7d'): Promise<string> => {
 
@@ -161,7 +169,6 @@ export const verifyToken = (token: string): TokenPayload | null => {
             apellido: decoded.apellido,
             email: decoded.email,
             admin: decoded.admin || false,
-            role: decoded.role || decoded.rol,
             rol: decoded.rol || decoded.role
         };
     } catch (error) {
@@ -174,6 +181,8 @@ export const verifyToken = (token: string): TokenPayload | null => {
 // ==========================================
 
 export const refreshToken = (req: Request, res: Response) => {
+
+    console.log(req.usuario)
     try {
         if (!req.usuario) {
             return res.status(401).json({
@@ -188,7 +197,6 @@ export const refreshToken = (req: Request, res: Response) => {
             apellido: req.usuario.apellido,
             email: req.usuario.email,
             admin: req.usuario.admin,
-            role: req.usuario.role,
             rol: req.usuario.rol
         });
 

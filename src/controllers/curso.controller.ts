@@ -43,7 +43,7 @@ export const obtenerCursos = async (req: Request, res: Response) => {
         } = req.query as CursoQuery & { page?: string; limit?: string };
 
 
-        console.log(categoria, activo, publico, semestre, search, page, limit, año)
+        // console.log(categoria, activo, publico, semestre, search, page, limit, año)
 
         const cursos = await Curso.find()
         // .skip((pageNum - 1) * limitNum).limit(limitNum)
