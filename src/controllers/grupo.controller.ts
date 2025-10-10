@@ -18,7 +18,7 @@ export const crearGrupo = async (req: Request, res: Response) => {
 
         // Verificar que no exista un grupo activo con el mismo número en el curso
         const grupoExistente = await Grupo.findOne({
-            cid: new Types.ObjectId(cid),
+            cid: Types.ObjectId.createFromHexString(cid),
             numero,
             activo: true
         });
@@ -32,7 +32,7 @@ export const crearGrupo = async (req: Request, res: Response) => {
 
         // Crear nuevo grupo
         const nuevoGrupo = new Grupo({
-            cid: new Types.ObjectId(cid),
+            cid: Types.ObjectId.createFromHexString(cid),
             numero,
             nombre,
             descripcion,
@@ -91,7 +91,7 @@ export const obtenerGrupos = async (req: Request, res: Response) => {
         // Agregar cantidad de estudiantes a cada grupo
         const gruposConEstadisticas = await Promise.all(
             grupos.map(async (grupo) => {
-                const cantidadEstudiantes = await Grupo.contarEstudiantes(grupo.gid.toString());
+                const cantidadEstudiantes = await Grupo.contarEstudiantes((grupo._id as any).toString());
                 return {
                     ...grupo.toJSON(),
                     cantidadEstudiantes
@@ -183,7 +183,7 @@ export const obtenerGruposDeCurso = async (req: Request, res: Response) => {
         // Agregar estadísticas a cada grupo
         const gruposConEstadisticas = await Promise.all(
             grupos.map(async (grupo) => {
-                const cantidadEstudiantes = await Grupo.contarEstudiantes(grupo.gid.toString());
+                const cantidadEstudiantes = await Grupo.contarEstudiantes((grupo._id as any).toString());
                 const estaLleno = await grupo.estaLleno();
 
                 return {
@@ -235,7 +235,7 @@ export const actualizarGrupo = async (req: Request, res: Response) => {
                 cid: grupo.cid,
                 numero,
                 activo: true,
-                gid: { $ne: grupo.gid }
+                gid: { $ne: grupo._id }
             });
 
             if (grupoConMismoNumero) {

@@ -18,7 +18,7 @@ export const crearMatricula = async (req: Request, res: Response) => {
 
     try {
         const { uid, cid, gid, rol, notas } = req.body;
-        const matriculadoPor = req.uid; // Del middleware de auth
+        const matriculadoPor = req.usuario?.uid; // Del middleware de auth
 
         // Verificar si ya existe una matrícula activa
         const matriculaExistente = await Matricula.findOne({
@@ -82,22 +82,20 @@ export const crearMatricula = async (req: Request, res: Response) => {
             fechaMatricula: new Date()
         });
 
-        console.log(nuevaMatricula)
-
         await nuevaMatricula.save();
 
-        // // Poblar datos para respuesta
-        // await nuevaMatricula.populate([
-        //     { path: 'uid', select: 'nombre apellido email avatar' },
-        //     { path: 'cid', select: 'nombre sigla categoria semestre' },
-        //     { path: 'gid', select: 'numero nombre' }
-        // ]);
+        // Poblar datos para respuesta
+        await nuevaMatricula.populate([
+            { path: 'uid', select: 'nombre apellido email avatar' },
+            { path: 'cid', select: 'nombre sigla categoria semestre' },
+            { path: 'gid', select: 'numero nombre' }
+        ]);
 
-        // return res.status(201).json({
-        //     ok: true,
-        //     message: 'Matrícula creada exitosamente',
-        //     matricula: nuevaMatricula
-        // });
+        return res.status(201).json({
+            ok: true,
+            message: 'Matrícula creada exitosamente',
+            matricula: nuevaMatricula
+        });
 
     } catch (error: any) {
         console.error('Error al crear matrícula:', error);
@@ -333,8 +331,9 @@ export const eliminarMatricula = async (req: Request, res: Response) => {
 // ==========================================
 
 export const obtenerMisCursos = async (req: Request, res: Response) => {
+
     try {
-        const uid = req.uid; // Del middleware de auth
+        const uid = req.usuario?.uid; // Del middleware de auth
 
         if (!uid) {
             return res.status(401).json({
@@ -421,7 +420,7 @@ export const obtenerEstudiantesDeCurso = async (req: Request, res: Response) => 
 export const verificarMatricula = async (req: Request, res: Response) => {
     try {
         const { cursoId } = req.params;
-        const uid = req.uid; // Del middleware de auth
+        const uid = req.usuario?.uid; // Del middleware de auth
 
         if (!uid) {
             return res.status(401).json({

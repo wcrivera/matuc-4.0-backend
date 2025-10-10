@@ -14,7 +14,7 @@ import { Types } from 'mongoose';
 export const verificarMatriculaEnCurso = (rolesPermitidos?: string[]) => {
     return async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const uid = req.uid;
+            const uid = req.usuario?.uid;
             const cursoId = req.params.cursoId || req.params.id || req.body.cid;
 
             if (!uid) {
@@ -33,8 +33,8 @@ export const verificarMatriculaEnCurso = (rolesPermitidos?: string[]) => {
 
             // Buscar matrícula activa
             const matricula = await Matricula.findOne({
-                uid: new Types.ObjectId(uid),
-                cid: new Types.ObjectId(cursoId),
+                uid: Types.ObjectId.createFromHexString(uid),
+                cid: Types.ObjectId.createFromHexString(cursoId),
                 activo: true
             });
 
@@ -55,7 +55,7 @@ export const verificarMatriculaEnCurso = (rolesPermitidos?: string[]) => {
 
             // Agregar la matrícula al request para uso posterior
             req.matricula = {
-                mid: matricula.mid.toString(),
+                mid: (matricula._id as any).toString(),
                 rol: matricula.rol,
                 fechaMatricula: matricula.fechaMatricula
             };
@@ -79,7 +79,7 @@ export const verificarMatriculaEnCurso = (rolesPermitidos?: string[]) => {
 
 export const esProfesorDelCurso = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const uid = req.uid;
+        const uid = req.usuario?.uid;
         const cursoId = req.params.cursoId || req.params.id || req.body.cid;
 
         if (!uid) {
@@ -91,8 +91,8 @@ export const esProfesorDelCurso = async (req: Request, res: Response, next: Next
 
         // Buscar matrícula como profesor o profesor_editor
         const matricula = await Matricula.findOne({
-            uid: new Types.ObjectId(uid),
-            cid: new Types.ObjectId(cursoId),
+            uid: Types.ObjectId.createFromHexString(uid),
+            cid: Types.ObjectId.createFromHexString(cursoId),
             rol: { $in: ['profesor', 'profesor_editor'] },
             activo: true
         });
@@ -105,7 +105,7 @@ export const esProfesorDelCurso = async (req: Request, res: Response, next: Next
         }
 
         req.matricula = {
-            mid: matricula.mid.toString(),
+            mid: (matricula._id as any).toString(),
             rol: matricula.rol,
             fechaMatricula: matricula.fechaMatricula
         };
@@ -129,7 +129,7 @@ export const esProfesorDelCurso = async (req: Request, res: Response, next: Next
 export const tieneRolEnCurso = (rolesPermitidos: string[]) => {
     return async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const uid = req.uid;
+            const uid = req.usuario?.uid;
             const cursoId = req.params.cursoId || req.params.id || req.body.cid;
 
             if (!uid) {
@@ -155,7 +155,7 @@ export const tieneRolEnCurso = (rolesPermitidos: string[]) => {
             }
 
             req.matricula = {
-                mid: matricula.mid.toString(),
+                mid: (matricula._id as any).toString(),
                 rol: matricula.rol,
                 fechaMatricula: matricula.fechaMatricula
             };
@@ -179,7 +179,7 @@ export const tieneRolEnCurso = (rolesPermitidos: string[]) => {
 
 export const agregarInfoMatricula = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const uid = req.uid;
+        const uid = req.usuario?.uid;
         const cursoId = req.params.cursoId || req.params.id;
 
         if (uid && cursoId) {
@@ -191,7 +191,7 @@ export const agregarInfoMatricula = async (req: Request, res: Response, next: Ne
 
             if (matricula) {
                 req.matricula = {
-                    mid: matricula.mid.toString(),
+                    mid: (matricula._id as any).toString(),
                     rol: matricula.rol,
                     fechaMatricula: matricula.fechaMatricula
                 };

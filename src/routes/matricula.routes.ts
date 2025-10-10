@@ -56,7 +56,6 @@ const validarCrearMatricula = [
         .isString()
         .isLength({ max: 500 })
         .withMessage('Las notas no pueden exceder 500 caracteres'),
-
     validarCampos
 ];
 

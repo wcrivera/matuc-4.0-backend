@@ -11,7 +11,6 @@ import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IMatricula extends Document {
     // _id es generado automáticamente por MongoDB
-    mid?: string;                       // ID de la matrícula (para JSON transform)
     uid: Types.ObjectId;                // ID del usuario matriculado
     cid: Types.ObjectId;                // ID del curso
     gid?: Types.ObjectId;               // ID del grupo (opcional)
@@ -259,8 +258,8 @@ MatriculaSchema.pre('save', async function (next) {
         const Curso = model('Curso');
 
         const [usuarioExiste, cursoExiste] = await Promise.all([
-            Usuario.exists({ uid: this.uid }),
-            Curso.exists({ cid: this.cid })
+            Usuario.exists({ _id: this.uid }),  // ✅ Buscar por _id
+            Curso.exists({ _id: this.cid })      // ✅ Buscar por _id
         ]);
 
         if (!usuarioExiste) {
@@ -274,7 +273,7 @@ MatriculaSchema.pre('save', async function (next) {
         // Validar grupo si se proporciona
         if (this.gid) {
             const Grupo = model('Grupo');
-            const grupoExiste = await Grupo.exists({ gid: this.gid });
+            const grupoExiste = await Grupo.exists({ _id: this.gid });  // ✅ Buscar por _id
 
             if (!grupoExiste) {
                 throw new Error('El grupo no existe');
@@ -288,8 +287,8 @@ MatriculaSchema.pre('save', async function (next) {
 MatriculaSchema.post('save', async function (doc) {
     if (doc.rol === 'estudiante' && doc.activo) {
         const Curso = model('Curso');
-        await Curso.findOneAndUpdate(
-            { cid: doc.cid },
+        await Curso.findByIdAndUpdate(  // ✅ Usar findByIdAndUpdate
+            doc.cid,
             { $inc: { 'estadisticas.totalEstudiantes': 1 } }
         );
     }
@@ -299,8 +298,8 @@ MatriculaSchema.post('save', async function (doc) {
 MatriculaSchema.post('findOneAndUpdate', async function (doc) {
     if (doc && doc.rol === 'estudiante' && !doc.activo) {
         const Curso = model('Curso');
-        await Curso.findOneAndUpdate(
-            { cid: doc.cid },
+        await Curso.findByIdAndUpdate(  // ✅ Usar findByIdAndUpdate
+            doc.cid,
             { $inc: { 'estadisticas.totalEstudiantes': -1 } }
         );
     }
