@@ -15,6 +15,7 @@ import SocketHandler from './socket/socket';
 import authRoutes from './routes/auth.routes';
 import cursoRoutes from './routes/curso.routes';
 import matriculaRoutes from './routes/matricula.routes';
+import grupoRoutes from './routes/grupo.routes';
 
 export default class Server {
     public app: express.Express;
@@ -58,7 +59,7 @@ export default class Server {
     private middlewares(): void {
         // Seguridad básica
         this.app.use(helmet());
-        this.app.use(compression() as express.RequestHandler);
+        this.app.use(compression());
 
         // Rate limiting
         this.app.use(rateLimit({
@@ -90,6 +91,7 @@ export default class Server {
         this.app.use('/api/auth', authRoutes);
         this.app.use('/api/curso', cursoRoutes);
         this.app.use('/api/matricula', matriculaRoutes);
+        this.app.use('/api/grupo', grupoRoutes);
     }
 
     private errorHandling(): void {

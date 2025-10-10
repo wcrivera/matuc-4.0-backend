@@ -1,25 +1,29 @@
-// src/controllers/matricula.controller.ts (Backend)
+// src/controllers/matricula.controller.ts
 // ==========================================
-// 🎓 CONTROLADOR DE MATRÍCULA
+// 🎓 CONTROLADOR DE MATRÍCULA - MATUC v4.0
 // ==========================================
 
 import { Request, Response } from 'express';
 import Matricula from '../models/Matricula';
+import Grupo from '../models/Grupo';
 import { Types } from 'mongoose';
+
+
 
 // ==========================================
 // ➕ CREAR MATRÍCULA
 // ==========================================
 
 export const crearMatricula = async (req: Request, res: Response) => {
+
     try {
-        const { uid, cid, rol, notas } = req.body;
+        const { uid, cid, gid, rol, notas } = req.body;
         const matriculadoPor = req.uid; // Del middleware de auth
 
         // Verificar si ya existe una matrícula activa
         const matriculaExistente = await Matricula.findOne({
-            uid: new Types.ObjectId(uid),
-            cid: new Types.ObjectId(cid),
+            uid: Types.ObjectId.createFromHexString(uid),
+            cid: Types.ObjectId.createFromHexString(cid),
             activo: true
         });
 
@@ -30,24 +34,70 @@ export const crearMatricula = async (req: Request, res: Response) => {
             });
         }
 
+        // Si se especifica un grupo, verificar que existe y tiene cupo
+        if (gid) {
+            const grupo = await Grupo.findById(gid);
+
+            if (!grupo) {
+                return res.status(404).json({
+                    ok: false,
+                    message: 'El grupo especificado no existe'
+                });
+            }
+
+            if (!grupo.activo) {
+                return res.status(400).json({
+                    ok: false,
+                    message: 'El grupo no está activo'
+                });
+            }
+
+            // Verificar si el grupo pertenece al curso
+            if (grupo.cid.toString() !== cid) {
+                return res.status(400).json({
+                    ok: false,
+                    message: 'El grupo no pertenece al curso especificado'
+                });
+            }
+
+            // Verificar cupo disponible
+            const tieneCupo = await Grupo.tieneCupoDisponible(gid);
+            if (!tieneCupo) {
+                return res.status(400).json({
+                    ok: false,
+                    message: 'El grupo no tiene cupo disponible'
+                });
+            }
+        }
+
         // Crear nueva matrícula
         const nuevaMatricula = new Matricula({
-            uid: new Types.ObjectId(uid),
-            cid: new Types.ObjectId(cid),
+            uid: Types.ObjectId.createFromHexString(uid),
+            cid: Types.ObjectId.createFromHexString(cid),
+            gid: gid ? Types.ObjectId.createFromHexString(gid) : undefined,
             rol,
-            matriculadoPor: matriculadoPor ? new Types.ObjectId(matriculadoPor) : undefined,
+            matriculadoPor: matriculadoPor ? Types.ObjectId.createFromHexString(matriculadoPor) : undefined,
             notas,
             activo: true,
             fechaMatricula: new Date()
         });
 
+        console.log(nuevaMatricula)
+
         await nuevaMatricula.save();
 
-        return res.status(201).json({
-            ok: true,
-            message: 'Matrícula creada exitosamente',
-            matricula: nuevaMatricula
-        });
+        // // Poblar datos para respuesta
+        // await nuevaMatricula.populate([
+        //     { path: 'uid', select: 'nombre apellido email avatar' },
+        //     { path: 'cid', select: 'nombre sigla categoria semestre' },
+        //     { path: 'gid', select: 'numero nombre' }
+        // ]);
+
+        // return res.status(201).json({
+        //     ok: true,
+        //     message: 'Matrícula creada exitosamente',
+        //     matricula: nuevaMatricula
+        // });
 
     } catch (error: any) {
         console.error('Error al crear matrícula:', error);
@@ -60,17 +110,18 @@ export const crearMatricula = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 📋 OBTENER MATRÍCULAS (con filtros)
+// 📋 OBTENER MATRÍCULAS (con filtros y paginación)
 // ==========================================
 
 export const obtenerMatriculas = async (req: Request, res: Response) => {
     try {
-        const { uid, cid, rol, activo, page = 1, limit = 10 } = req.query;
+        const { uid, cid, gid, rol, activo, page = 1, limit = 10 } = req.query;
 
         // Construir filtros
         const filtros: any = {};
         if (uid) filtros.uid = new Types.ObjectId(uid as string);
         if (cid) filtros.cid = new Types.ObjectId(cid as string);
+        if (gid) filtros.gid = new Types.ObjectId(gid as string);
         if (rol) filtros.rol = rol;
         if (activo !== undefined) filtros.activo = activo === 'true';
 
@@ -82,6 +133,8 @@ export const obtenerMatriculas = async (req: Request, res: Response) => {
             Matricula.find(filtros)
                 .populate('uid', 'nombre apellido email avatar')
                 .populate('cid', 'nombre sigla categoria semestre')
+                .populate('gid', 'numero nombre')
+                .populate('matriculadoPor', 'nombre apellido')
                 .sort({ fechaMatricula: -1 })
                 .skip(skip)
                 .limit(Number(limit)),
@@ -117,6 +170,7 @@ export const obtenerMatriculaPorId = async (req: Request, res: Response) => {
         const matricula = await Matricula.findOne({ mid: new Types.ObjectId(id) })
             .populate('uid', 'nombre apellido email avatar')
             .populate('cid', 'nombre sigla categoria semestre descripcion')
+            .populate('gid', 'numero nombre descripcion cupoMaximo')
             .populate('matriculadoPor', 'nombre apellido');
 
         if (!matricula) {
@@ -148,7 +202,7 @@ export const obtenerMatriculaPorId = async (req: Request, res: Response) => {
 export const actualizarMatricula = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { rol, activo, notas } = req.body;
+        const { rol, activo, notas, gid } = req.body;
 
         const matricula = await Matricula.findOne({ mid: new Types.ObjectId(id) });
 
@@ -159,19 +213,68 @@ export const actualizarMatricula = async (req: Request, res: Response) => {
             });
         }
 
-        // Actualizar campos
-        if (rol !== undefined) matricula.rol = rol;
+        // Actualizar rol
+        if (rol !== undefined) {
+            matricula.rol = rol;
+        }
+
+        // Actualizar estado activo
         if (activo !== undefined) {
-            matricula.activo = activo;
-            if (!activo) {
-                matricula.fechaBaja = new Date();
-            } else {
-                matricula.fechaBaja = undefined;
+            if (activo && !matricula.activo) {
+                // Reactivar
+                await matricula.reactivar();
+            } else if (!activo && matricula.activo) {
+                // Dar de baja
+                await matricula.darDeBaja();
             }
         }
-        if (notas !== undefined) matricula.notas = notas;
+
+        // Actualizar notas
+        if (notas !== undefined) {
+            matricula.notas = notas;
+        }
+
+        // Cambiar grupo
+        if (gid !== undefined) {
+            if (gid === null) {
+                matricula.gid = undefined;
+            } else {
+                const grupo = await Grupo.findOne({ gid: new Types.ObjectId(gid) });
+
+                if (!grupo) {
+                    return res.status(404).json({
+                        ok: false,
+                        message: 'El grupo especificado no existe'
+                    });
+                }
+
+                if (grupo.cid.toString() !== matricula.cid.toString()) {
+                    return res.status(400).json({
+                        ok: false,
+                        message: 'El grupo no pertenece al curso de la matrícula'
+                    });
+                }
+
+                const tieneCupo = await Grupo.tieneCupoDisponible(gid);
+                if (!tieneCupo) {
+                    return res.status(400).json({
+                        ok: false,
+                        message: 'El grupo no tiene cupo disponible'
+                    });
+                }
+
+                matricula.gid = new Types.ObjectId(gid);
+            }
+        }
 
         await matricula.save();
+
+        // Poblar datos para respuesta
+        await matricula.populate([
+            { path: 'uid', select: 'nombre apellido email avatar' },
+            { path: 'cid', select: 'nombre sigla categoria semestre' },
+            { path: 'gid', select: 'numero nombre' }
+        ]);
 
         return res.json({
             ok: true,
@@ -190,7 +293,7 @@ export const actualizarMatricula = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 🗑️ ELIMINAR MATRÍCULA (dar de baja)
+// 🗑️ ELIMINAR MATRÍCULA (Soft Delete)
 // ==========================================
 
 export const eliminarMatricula = async (req: Request, res: Response) => {
@@ -206,14 +309,12 @@ export const eliminarMatricula = async (req: Request, res: Response) => {
             });
         }
 
-        // Dar de baja (no eliminar físicamente)
-        matricula.activo = false;
-        matricula.fechaBaja = new Date();
-        await matricula.save();
+        // Dar de baja (soft delete)
+        await matricula.darDeBaja();
 
         return res.json({
             ok: true,
-            message: 'Matrícula eliminada exitosamente',
+            message: 'Matrícula dada de baja exitosamente',
             matricula
         });
 
@@ -228,43 +329,39 @@ export const eliminarMatricula = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 📚 OBTENER MIS CURSOS
+// 📚 OBTENER MIS CURSOS (Usuario autenticado)
 // ==========================================
 
 export const obtenerMisCursos = async (req: Request, res: Response) => {
     try {
-        const uid = req.uid;
+        const uid = req.uid; // Del middleware de auth
 
         if (!uid) {
             return res.status(401).json({
                 ok: false,
-                message: 'No autenticado'
+                message: 'Usuario no autenticado'
             });
         }
 
-        const { activo = 'true' } = req.query;
-
-        // Filtros
-        const filtros: any = { uid: new Types.ObjectId(uid) };
-        if (activo !== undefined) filtros.activo = activo === 'true';
-
-        // Obtener matrículas con datos del curso
-        const matriculas = await Matricula.find(filtros)
-            .populate('cid', 'nombre sigla categoria semestre año descripcion activo publico estadisticas')
+        const matriculas = await Matricula.find({
+            uid: new Types.ObjectId(uid),
+            activo: true
+        })
+            .populate('cid', 'nombre sigla categoria semestre año descripcion activo')
+            .populate('gid', 'numero nombre')
             .sort({ fechaMatricula: -1 });
 
-        // Transformar para incluir el rol
-        const cursos = matriculas.map(m => ({
-            ...m.cid,
-            rol: m.rol,
-            fechaMatricula: m.fechaMatricula,
-            mid: m.mid
-        }));
+        // Separar por rol para mejor organización
+        const cursos = {
+            comoEstudiante: matriculas.filter(m => m.rol === 'estudiante'),
+            comoAyudante: matriculas.filter(m => m.rol === 'ayudante'),
+            comoProfesor: matriculas.filter(m => m.rol === 'profesor' || m.rol === 'profesor_editor')
+        };
 
         return res.json({
             ok: true,
             cursos,
-            total: cursos.length
+            total: matriculas.length
         });
 
     } catch (error: any) {
@@ -284,44 +381,31 @@ export const obtenerMisCursos = async (req: Request, res: Response) => {
 export const obtenerEstudiantesDeCurso = async (req: Request, res: Response) => {
     try {
         const { cursoId } = req.params;
-        const { rol, activo = 'true' } = req.query;
+        const { gid, activo = 'true' } = req.query;
 
-        // Construir filtros
         const filtros: any = {
             cid: new Types.ObjectId(cursoId),
+            rol: 'estudiante',
             activo: activo === 'true'
         };
 
-        if (rol) {
-            filtros.rol = rol;
+        if (gid) {
+            filtros.gid = new Types.ObjectId(gid as string);
         }
 
-        // Obtener matrículas con datos del usuario
-        const matriculas = await Matricula.find(filtros)
-            .populate('uid', 'nombre apellido email avatar ultimaConexion')
-            .sort({ rol: 1, fechaMatricula: 1 });
-
-        // Agrupar por rol
-        const porRol = {
-            estudiantes: matriculas.filter(m => m.rol === 'estudiante'),
-            ayudantes: matriculas.filter(m => m.rol === 'ayudante'),
-            profesores: matriculas.filter(m => m.rol === 'profesor' || m.rol === 'profesor_editor')
-        };
+        const estudiantes = await Matricula.find(filtros)
+            .populate('uid', 'nombre apellido email avatar')
+            .populate('gid', 'numero nombre')
+            .sort({ 'uid.apellido': 1, 'uid.nombre': 1 });
 
         return res.json({
             ok: true,
-            matriculas,
-            porRol,
-            total: matriculas.length,
-            totales: {
-                estudiantes: porRol.estudiantes.length,
-                ayudantes: porRol.ayudantes.length,
-                profesores: porRol.profesores.length
-            }
+            estudiantes,
+            total: estudiantes.length
         });
 
     } catch (error: any) {
-        console.error('Error al obtener estudiantes del curso:', error);
+        console.error('Error al obtener estudiantes:', error);
         return res.status(500).json({
             ok: false,
             message: 'Error al obtener los estudiantes',
@@ -331,42 +415,40 @@ export const obtenerEstudiantesDeCurso = async (req: Request, res: Response) => 
 };
 
 // ==========================================
-// 🔍 VERIFICAR MATRÍCULA
+// 🔍 VERIFICAR MATRÍCULA EN CURSO
 // ==========================================
 
 export const verificarMatricula = async (req: Request, res: Response) => {
     try {
         const { cursoId } = req.params;
-        const uid = req.uid;
+        const uid = req.uid; // Del middleware de auth
 
         if (!uid) {
             return res.status(401).json({
                 ok: false,
-                message: 'No autenticado'
+                message: 'Usuario no autenticado'
             });
         }
 
-        // Buscar matrícula activa
         const matricula = await Matricula.findOne({
             uid: new Types.ObjectId(uid),
             cid: new Types.ObjectId(cursoId),
             activo: true
-        });
+        })
+            .populate('gid', 'numero nombre');
 
         if (!matricula) {
             return res.json({
                 ok: true,
                 matriculado: false,
-                rol: null
+                matricula: null
             });
         }
 
         return res.json({
             ok: true,
             matriculado: true,
-            rol: matricula.rol,
-            mid: matricula.mid,
-            fechaMatricula: matricula.fechaMatricula
+            matricula
         });
 
     } catch (error: any) {
@@ -374,6 +456,111 @@ export const verificarMatricula = async (req: Request, res: Response) => {
         return res.status(500).json({
             ok: false,
             message: 'Error al verificar la matrícula',
+            error: error.message
+        });
+    }
+};
+
+// ==========================================
+// 🔄 CAMBIAR ESTUDIANTE DE GRUPO
+// ==========================================
+
+export const cambiarGrupo = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { gid } = req.body;
+
+        const matricula = await Matricula.findOne({ mid: new Types.ObjectId(id) });
+
+        if (!matricula) {
+            return res.status(404).json({
+                ok: false,
+                message: 'Matrícula no encontrada'
+            });
+        }
+
+        if (!gid) {
+            return res.status(400).json({
+                ok: false,
+                message: 'El ID del grupo es requerido'
+            });
+        }
+
+        const grupo = await Grupo.findOne({ gid: new Types.ObjectId(gid) });
+
+        if (!grupo) {
+            return res.status(404).json({
+                ok: false,
+                message: 'El grupo especificado no existe'
+            });
+        }
+
+        if (grupo.cid.toString() !== matricula.cid.toString()) {
+            return res.status(400).json({
+                ok: false,
+                message: 'El grupo no pertenece al curso de la matrícula'
+            });
+        }
+
+        const tieneCupo = await Grupo.tieneCupoDisponible(gid);
+        if (!tieneCupo) {
+            return res.status(400).json({
+                ok: false,
+                message: 'El grupo no tiene cupo disponible'
+            });
+        }
+
+        matricula.gid = new Types.ObjectId(gid);
+        await matricula.save();
+
+        await matricula.populate([
+            { path: 'uid', select: 'nombre apellido email' },
+            { path: 'gid', select: 'numero nombre' }
+        ]);
+
+        return res.json({
+            ok: true,
+            message: 'Grupo actualizado exitosamente',
+            matricula
+        });
+
+    } catch (error: any) {
+        console.error('Error al cambiar grupo:', error);
+        return res.status(500).json({
+            ok: false,
+            message: 'Error al cambiar el grupo',
+            error: error.message
+        });
+    }
+};
+
+// ==========================================
+// 👥 OBTENER ESTUDIANTES DE UN GRUPO
+// ==========================================
+
+export const obtenerEstudiantesDeGrupo = async (req: Request, res: Response) => {
+    try {
+        const { grupoId } = req.params;
+
+        const estudiantes = await Matricula.find({
+            gid: new Types.ObjectId(grupoId),
+            rol: 'estudiante',
+            activo: true
+        })
+            .populate('uid', 'nombre apellido email avatar')
+            .sort({ 'uid.apellido': 1, 'uid.nombre': 1 });
+
+        return res.json({
+            ok: true,
+            estudiantes,
+            total: estudiantes.length
+        });
+
+    } catch (error: any) {
+        console.error('Error al obtener estudiantes del grupo:', error);
+        return res.status(500).json({
+            ok: false,
+            message: 'Error al obtener los estudiantes del grupo',
             error: error.message
         });
     }

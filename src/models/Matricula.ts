@@ -1,70 +1,62 @@
-// src/models/Matricula.ts (Backend)
+// src/models/Matricula.ts
 // ==========================================
-// 🎓 MODELO DE MATRÍCULA - MONGOOSE
-// ==========================================
-
-import { Schema, model, Types } from 'mongoose';
-
-// ==========================================
-// 📚 INTERFACE PARA TYPESCRIPT
+// 🎓 MODELO MATRÍCULA - MATUC v4.0 (CORREGIDO)
 // ==========================================
 
-interface IMatricula {
-    // === IDENTIFICADOR PRINCIPAL ===
-    mid: Types.ObjectId;            // ID principal de matrícula
+import { Schema, model, Document, Types } from 'mongoose';
 
-    // === RELACIONES ===
-    uid: Types.ObjectId;            // Referencia a Usuario
-    cid: Types.ObjectId;            // Referencia a Curso
+// ==========================================
+// 📋 INTERFACE MATRÍCULA
+// ==========================================
 
-    // === ROL EN EL CURSO ===
+export interface IMatricula extends Document {
+    // _id es generado automáticamente por MongoDB
+    mid?: string;                       // ID de la matrícula (para JSON transform)
+    uid: Types.ObjectId;                // ID del usuario matriculado
+    cid: Types.ObjectId;                // ID del curso
+    gid?: Types.ObjectId;               // ID del grupo (opcional)
     rol: 'estudiante' | 'ayudante' | 'profesor' | 'profesor_editor';
+    activo: boolean;                    // Si la matrícula está activa
+    fechaMatricula: Date;               // Fecha de matrícula
+    fechaBaja?: Date;                   // Fecha de baja (si aplica)
+    matriculadoPor?: Types.ObjectId;    // Usuario que matriculó
+    notas?: string;                     // Notas adicionales
+    createdAt: Date;                    // Timestamp de creación
+    updatedAt: Date;                    // Timestamp de actualización
 
-    // === ESTADO ===
-    activo: boolean;                // Si está activa
-    fechaMatricula: Date;           // Fecha de matrícula
-    fechaBaja?: Date;               // Fecha de baja (si existe)
-
-    // === METADATA ===
-    matriculadoPor?: Types.ObjectId; // Referencia al usuario que matriculó
-    notas?: string;                 // Notas adicionales
-
-    // === TIMESTAMPS AUTOMÁTICOS ===
-    createdAt: Date;
-    updatedAt: Date;
+    // Métodos de instancia
+    darDeBaja(): Promise<IMatricula>;
+    reactivar(): Promise<IMatricula>;
+    cambiarRol(nuevoRol: 'estudiante' | 'ayudante' | 'profesor' | 'profesor_editor'): Promise<IMatricula>;
 }
 
 // ==========================================
-// 🔧 SCHEMA DE MONGOOSE
+// 🗄️ SCHEMA MATRÍCULA
 // ==========================================
 
 const MatriculaSchema = new Schema<IMatricula>(
     {
-        // ID Principal (igual que uid en Usuario, cid en Curso)
-        mid: {
-            type: Schema.Types.ObjectId,
-            default: () => new Types.ObjectId(),
-            unique: true,
-            required: true,
-            index: true
-        },
-
-        // Referencias
         uid: {
             type: Schema.Types.ObjectId,
             ref: 'Usuario',
-            required: [true, 'El usuario es requerido'],
+            required: [true, 'El ID del usuario es requerido'],
             index: true
         },
 
         cid: {
             type: Schema.Types.ObjectId,
             ref: 'Curso',
-            required: [true, 'El curso es requerido'],
+            required: [true, 'El ID del curso es requerido'],
             index: true
         },
 
-        // Rol en el curso
+        gid: {
+            type: Schema.Types.ObjectId,
+            ref: 'Grupo',
+            default: null,
+            index: true
+        },
+
         rol: {
             type: String,
             enum: ['estudiante', 'ayudante', 'profesor', 'profesor_editor'],
@@ -72,7 +64,6 @@ const MatriculaSchema = new Schema<IMatricula>(
             default: 'estudiante'
         },
 
-        // Estado
         activo: {
             type: Boolean,
             default: true,
@@ -90,7 +81,6 @@ const MatriculaSchema = new Schema<IMatricula>(
             default: null
         },
 
-        // Metadata
         matriculadoPor: {
             type: Schema.Types.ObjectId,
             ref: 'Usuario',
@@ -104,9 +94,9 @@ const MatriculaSchema = new Schema<IMatricula>(
         }
     },
     {
-        timestamps: true,           // Agrega createdAt y updatedAt automáticamente
-        collection: 'matriculas',   // Nombre de la colección en MongoDB
-        versionKey: false           // Desactiva __v
+        timestamps: true,
+        collection: 'matriculas',
+        versionKey: false
     }
 );
 
@@ -124,6 +114,16 @@ MatriculaSchema.index(
     }
 );
 
+// Índice único: un usuario solo puede estar en UN grupo activo por curso
+MatriculaSchema.index(
+    { uid: 1, cid: 1, gid: 1, activo: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { activo: true, gid: { $ne: null } },
+        name: 'unique_active_group_enrollment'
+    }
+);
+
 // Índice para búsquedas por curso
 MatriculaSchema.index({ cid: 1, activo: 1 });
 
@@ -132,6 +132,9 @@ MatriculaSchema.index({ uid: 1, activo: 1 });
 
 // Índice para búsquedas por rol
 MatriculaSchema.index({ cid: 1, rol: 1, activo: 1 });
+
+// Índice para búsquedas por grupo
+MatriculaSchema.index({ gid: 1, activo: 1 });
 
 // ==========================================
 // 🔧 MÉTODOS ESTÁTICOS
@@ -184,6 +187,7 @@ MatriculaSchema.statics.obtenerCursosDeUsuario = async function (
 
     return await this.find(filtro)
         .populate('cid', 'nombre sigla categoria semestre año activo')
+        .populate('gid', 'numero nombre')
         .sort({ fechaMatricula: -1 });
 };
 
@@ -199,6 +203,22 @@ MatriculaSchema.statics.obtenerUsuariosDeCurso = async function (
 
     return await this.find(filtro)
         .populate('uid', 'nombre apellido email avatar')
+        .populate('gid', 'numero nombre')
+        .sort({ rol: 1, fechaMatricula: 1 });
+};
+
+// Obtener matrículas de un grupo específico
+MatriculaSchema.statics.obtenerUsuariosDeGrupo = async function (
+    gid: string,
+    rol?: string,
+    soloActivas: boolean = true
+) {
+    const filtro: any = { gid: new Types.ObjectId(gid) };
+    if (rol) filtro.rol = rol;
+    if (soloActivas) filtro.activo = true;
+
+    return await this.find(filtro)
+        .populate('uid', 'nombre apellido email avatar')
         .sort({ rol: 1, fechaMatricula: 1 });
 };
 
@@ -207,23 +227,23 @@ MatriculaSchema.statics.obtenerUsuariosDeCurso = async function (
 // ==========================================
 
 // Dar de baja una matrícula
-MatriculaSchema.methods.darDeBaja = async function () {
+MatriculaSchema.methods.darDeBaja = async function (): Promise<IMatricula> {
     this.activo = false;
     this.fechaBaja = new Date();
     return await this.save();
 };
 
 // Reactivar una matrícula
-MatriculaSchema.methods.reactivar = async function () {
+MatriculaSchema.methods.reactivar = async function (): Promise<IMatricula> {
     this.activo = true;
-    this.fechaBaja = null;
+    this.fechaBaja = undefined;
     return await this.save();
 };
 
 // Cambiar rol
 MatriculaSchema.methods.cambiarRol = async function (
     nuevoRol: 'estudiante' | 'ayudante' | 'profesor' | 'profesor_editor'
-) {
+): Promise<IMatricula> {
     this.rol = nuevoRol;
     return await this.save();
 };
@@ -249,6 +269,16 @@ MatriculaSchema.pre('save', async function (next) {
 
         if (!cursoExiste) {
             throw new Error('El curso no existe');
+        }
+
+        // Validar grupo si se proporciona
+        if (this.gid) {
+            const Grupo = model('Grupo');
+            const grupoExiste = await Grupo.exists({ gid: this.gid });
+
+            if (!grupoExiste) {
+                throw new Error('El grupo no existe');
+            }
         }
     }
     next();
@@ -277,21 +307,15 @@ MatriculaSchema.post('findOneAndUpdate', async function (doc) {
 });
 
 // ==========================================
-// 📤 TRANSFORMACIÓN PARA JSON
+// 📤 TRANSFORMACIÓN PARA JSON (CORREGIDO)
 // ==========================================
 
 MatriculaSchema.set('toJSON', {
-    transform: function (doc, ret) {
-        // Convertir _id y ObjectIds a strings
-        ret.mid = ret.mid?.toString();
-        ret.uid = ret.uid?.toString();
-        ret.cid = ret.cid?.toString();
-        ret.matriculadoPor = ret.matriculadoPor?.toString();
-
-        // Eliminar campos internos
+    virtuals: true,
+    transform: function (_doc, ret: any) {
+        ret.mid = ret._id;  // Convertir _id a mid
         delete ret._id;
         delete ret.__v;
-
         return ret;
     }
 });
@@ -300,4 +324,6 @@ MatriculaSchema.set('toJSON', {
 // 📤 EXPORTAR MODELO
 // ==========================================
 
-export default model<IMatricula>('Matricula', MatriculaSchema);
+const Matricula = model<IMatricula>('Matricula', MatriculaSchema);
+
+export default Matricula;
