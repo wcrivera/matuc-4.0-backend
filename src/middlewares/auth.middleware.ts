@@ -24,6 +24,7 @@ export interface TokenPayload {
 // ==========================================
 
 export const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
+
     try {
         // Obtener token del header Authorization
         const authHeader = req.headers.authorization;

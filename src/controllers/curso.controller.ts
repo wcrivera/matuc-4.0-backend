@@ -131,6 +131,7 @@ export const obtenerCursos = async (req: Request, res: Response) => {
 // ==========================================
 
 export const obtenerCursoPorId = async (req: Request, res: Response) => {
+    console.log('first')
     try {
         const { id } = req.params;
         const usuario = req.usuario;
