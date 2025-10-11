@@ -197,6 +197,7 @@ export const crearCurso = async (req: Request, res: Response) => {
 
     try {
         const usuario = req.usuario;
+
         const { sigla, nombre, descripcion, categoria, creditos, semestre, año, configuracion } = req.body;
 
         // Validar autenticación y permisos

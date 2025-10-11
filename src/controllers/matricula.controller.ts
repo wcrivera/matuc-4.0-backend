@@ -342,24 +342,84 @@ export const obtenerMisCursos = async (req: Request, res: Response) => {
             });
         }
 
-        const matriculas = await Matricula.find({
-            uid: new Types.ObjectId(uid),
-            activo: true
-        })
-            .populate('cid', 'nombre sigla categoria semestre año descripcion activo')
-            .populate('gid', 'numero nombre')
-            .sort({ fechaMatricula: -1 });
-
-        // Separar por rol para mejor organización
-        const cursos = {
-            comoEstudiante: matriculas.filter(m => m.rol === 'estudiante'),
-            comoAyudante: matriculas.filter(m => m.rol === 'ayudante'),
-            comoProfesor: matriculas.filter(m => m.rol === 'profesor' || m.rol === 'profesor_editor')
-        };
+        const matriculas = await Matricula.aggregate([
+            {
+                $match: {
+                    uid: new Types.ObjectId(uid),
+                    activo: true
+                }
+            },
+            {
+                $lookup: {
+                    from: 'cursos',  // Nombre de la colección en MongoDB
+                    localField: 'cid',
+                    foreignField: '_id',
+                    as: 'curso'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'grupos',  // Nombre de la colección en MongoDB
+                    localField: 'gid',
+                    foreignField: '_id',
+                    as: 'grupo'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$curso',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $unwind: {
+                    path: '$grupo',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $project: {
+                    _id: 0,  // No incluir el _id raíz
+                    // Objeto curso
+                    curso: {
+                        cid: '$curso._id',
+                        nombre: '$curso.nombre',
+                        sigla: '$curso.sigla',
+                        categoria: '$curso.categoria',
+                        semestre: '$curso.semestre',
+                        año: '$curso.año',
+                        descripcion: '$curso.descripcion',
+                        activo: '$curso.activo'
+                    },
+                    // Objeto grupo
+                    grupo: {
+                        gid: '$grupo._id',
+                        numero: '$grupo.numero',
+                        nombre: '$grupo.nombre'
+                    },
+                    // Objeto matrícula
+                    matricula: {
+                        mid: '$_id',
+                        uid: '$uid',
+                        cid: '$cid',
+                        gid: '$gid',
+                        rol: '$rol',
+                        activo: '$activo',
+                        fechaMatricula: '$fechaMatricula',
+                        fechaBaja: '$fechaBaja',
+                        matriculadoPor: '$matriculadoPor',
+                        notas: '$notas'
+                    }
+                }
+            },
+            {
+                $sort: { 'matricula.fechaMatricula': -1 }
+            }
+        ]);
 
         return res.json({
             ok: true,
-            cursos,
+            cursos: matriculas,
             total: matriculas.length
         });
 
